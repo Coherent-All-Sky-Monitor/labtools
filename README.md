@@ -8,7 +8,6 @@ Scripts and Software to control and record measurements from Lab instruments and
 - **`sa_avg.py`** - Multiple trace averaging.
 - **`sa_waterfall.py`** - Live waterfall display (frequency vs time).
 - **`sa_read.py`** - Load and display saved measurement files/
-- **`sa_yfactor.py`** - Measure hot and cold and compute teh noise figure and Tsys
 
 ## Hardware Connection Setup
 
