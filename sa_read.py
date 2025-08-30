@@ -1,15 +1,23 @@
-"""
-Spectrum Analyzer Data Reader
-----------------------------
-This script loads .npz files saved by the spectrum analyzer scripts, displays metadata,
-and plots the data.
+"""Spectrum Analyzer Data Reader.
 
-Usage:
-    Run the script and enter the filename (with or without .npz extension) when prompted.
+This module loads and displays data files saved by spectrum analyzer scripts. It provides
+functionality to read .npz files, display comprehensive metadata, and plot both single
+traces and waterfall data with appropriate visualizations.
 
-Dependencies:
-    - numpy
-    - matplotlib
+Dependencies
+------------
+numpy : library
+    For data loading and array operations
+matplotlib : library
+    For plotting and data visualization
+os : module
+    For file system operations
+
+Notes
+-----
+Supports both single trace data and waterfall data formats with automatic detection
+based on data structure. Displays formatted metadata and creates appropriate plots
+for each data type.
 """
 
 import os
@@ -18,9 +26,33 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    """
-    Main function that loads and displays spectrum analyzer data files.
-    Prompts user for filename, loads .npz file, displays metadata, and plots data.
+    """Load and display spectrum analyzer data files.
+
+    Interactive function that prompts for filename, loads .npz data file, displays
+    comprehensive metadata in formatted output, and creates appropriate plots based
+    on data type (single trace or waterfall).
+
+    The function automatically detects data format and creates optimized visualizations
+    with titles derived from metadata. Handles missing files gracefully with error
+    messages.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    >>> main()
+    Enter filename to load (with or without .npz): measurement_data
+
+    --- Metadata ---
+    Instrument: Keysight Technologies,E5071C,MY12345678,A.09.90
+    Measurement Type: Averaged Trace
+    ...
     """
     fname = input("Enter filename to load (with or without .npz): ").strip()
     if not fname.endswith('.npz'):

@@ -1,204 +1,144 @@
-"""
-Spectrum Analyzer VISA Control Tool (Live Waterfall)
---------------------------------------------------
+"""Spectrum Analyzer VISA Control Tool (Live Waterfall).
+
 This script connects to a spectrum analyzer using pyvisa, acquires repeated traces,
 and displays a live waterfall plot (frequency vs. time, color = amplitude).
+The waterfall display updates in real-time showing spectral evolution over time.
 
-Dependencies:
-    - pyvisa
-    - numpy
-    - matplotlib
+Dependencies
+------------
+pyvisa : library
+    For VISA instrument communication
+numpy : library
+    For numerical operations and array manipulation
+matplotlib : library
+    For plotting and real-time animation
+spectrum_utils : module
+    Local utilities for spectrum analyzer operations
+
+Notes
+-----
+This script provides a live waterfall display where:
+- X-axis represents frequency
+- Y-axis represents time (older traces at bottom, newer at top)
+- Color intensity represents signal amplitude
 """
-import datetime
-import pyvisa
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.widgets import Button, TextBox
+from spectrum_utils import SpectrumAnalyzer, pick_resource, prompt_sa_settings
 
-class SpectrumAnalyzer:
-    """
-    Object-oriented interface for controlling and acquiring data from a spectrum analyzer via VISA.
-    """
-    def __init__(self, resource):
-        """
-        Initialize the SpectrumAnalyzer with a VISA resource string.
-        Args:
-            resource (str): VISA resource string for the instrument.
-        """
-        self.rm = pyvisa.ResourceManager()
-        self.inst = self.rm.open_resource(resource)
-        self.inst.timeout = 5000  # ms
-        print(f"Connected to: {self.inst.query('*IDN?').strip()}")
-
-    def setup(self, fstart='375MHz', fstop='500MHz', rbw='10kHz', preamp=None, att=None):
-        """
-        Configure the frequency range, resolution bandwidth, preamp, and attenuation.
-        Args:
-            fstart (str): Start frequency (e.g., '375MHz').
-            fstop (str): Stop frequency (e.g., '500MHz').
-            rbw (str): Resolution bandwidth (e.g., '10kHz').
-            preamp (bool or None): Enable (True), disable (False), or leave unchanged (None).
-            att (float or None): Set input attenuation in dB, or leave unchanged (None).
-        """
-        self.inst.write(f'FREQ:START {fstart}')
-        self.inst.write(f'FREQ:STOP {fstop}')
-        self.inst.write(f'BAND {rbw}')
-        if preamp is not None:
-            self.inst.write(f'PREAMP:STATE {"ON" if preamp else "OFF"}')
-        if att is not None:
-            self.inst.write(f'INP:ATT {att}')
-
-    def acquire_trace(self):
-        """
-        Acquire a single trace from the spectrum analyzer.
-        Returns:
-            tuple: (frequency array, amplitude data array).
-        """
-        self.inst.write('INIT;*WAI')
-        fstart = float(self.inst.query('FREQ:STAR?'))
-        fstop = float(self.inst.query('FREQ:STOP?'))
-        data = self.inst.query_ascii_values('TRAC? TRACE1')
-        freq = np.linspace(fstart, fstop, len(data))
-        return freq, data
-
-    def close(self):
-        """
-        Close the VISA connection to the instrument.
-        """
-        self.inst.close()
-
-def pick_resource():
-    """
-    Interactively prompt user to select a VISA resource from available instruments.
-    Returns:
-        str: Selected VISA resource string.
-    """
-    rm = pyvisa.ResourceManager()
-    instruments = rm.list_resources()
-    if not instruments:
-        print("No VISA instruments found.")
-        exit(1)
-    print("Available VISA resources:")
-    for idx, res in enumerate(instruments):
-        print(f"  [{idx}] {res}")
-    while True:
-        try:
-            choice = int(input("Select resource number: "))
-            if 0 <= choice < len(instruments):
-                return instruments[choice]
-        except ValueError:
-            pass
-        print("Invalid selection. Try again.")
 
 def main():
+    """Execute the main spectrum analyzer waterfall workflow.
+
+    This function orchestrates the entire process of:
+    1. Connecting to a spectrum analyzer instrument
+    2. Configuring measurement parameters through user input
+    3. Setting up a live waterfall display
+    4. Continuously acquiring traces and updating the waterfall plot
+
+    The function creates a real-time animated waterfall display where new traces
+    are added to the top and older traces scroll downward. The animation
+    continues until the user closes the plot window.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    The waterfall display shows:
+    - Frequency on the x-axis
+    - Time progression on the y-axis (newest traces at top)
+    - Signal amplitude represented by color intensity
+
+    The animation updates every 200ms and maintains a rolling buffer
+    of the most recent traces.
     """
-    Main function that orchestrates instrument connection, configuration, and live waterfall.
-    """
+    # Select and connect to instrument
     resource = pick_resource()
     sa = SpectrumAnalyzer(resource)
-    fstart = (input("Enter start frequency (e.g., 375MHz) [default: 375MHz]: ").strip()
-              or "375MHz")
-    fstop = (input("Enter stop frequency (e.g., 500MHz) [default: 500MHz]: ").strip()
-             or "500MHz")
-    rbw = (input("Enter resolution bandwidth (e.g., 10kHz) [default: 10kHz]: ").strip()
-           or "10kHz")
-    # Prompt for preamp and attenuation
-    preamp = None
-    preamp_input = input("Enable preamp? (y/n, blank to skip): ").strip().lower()
-    if preamp_input == 'y':
-        preamp = True
-    elif preamp_input == 'n':
-        preamp = False
 
-    att = None
-    att_input = input("Set attenuation in dB (blank to skip): ").strip()
-    if att_input:
-        try:
-            att = float(att_input)
-        except ValueError:
-            print("Invalid attenuation value. Skipping.")
+    # Get measurement settings from user
+    settings = prompt_sa_settings()
 
-    sa.setup(fstart=fstart, fstop=fstop, rbw=rbw, preamp=preamp, att=att)
+    # Configure instrument
+    sa.setup(
+        fstart=settings["fstart"],
+        fstop=settings["fstop"],
+        rbw=settings["rbw"],
+        preamp=settings["preamp"],
+        att=settings["att"]
+    )
 
+    # Set up waterfall parameters
     n_traces = 100  # Number of lines in the waterfall
+
+    # Get initial trace to determine data dimensions
     freq, data = sa.acquire_trace()
     n_points = len(data)
+
+    # Initialize waterfall array
     waterfall = np.zeros((n_traces, n_points))
 
-    fig, ax = plt.subplots()
-    plt.subplots_adjust(top=0.82, bottom=0.13)
-    im = ax.imshow(waterfall, aspect='auto', origin='lower',
-                   extent=[freq[0], freq[-1], 0, n_traces], cmap='viridis')
-    ax.set_xlabel('Frequency (Hz)')
-    ax.set_ylabel('Time (trace index)')
-    preamp_str = (f"Preamp: {'ON' if preamp else 'OFF'}"
-                  if preamp is not None else "Preamp: N/A")
-    att_str = f"Att: {att} dB" if att is not None else "Att: N/A"
-    ax.set_title(f"Live Spectrum Waterfall ({preamp_str}, {att_str})")
-    cbar = fig.colorbar(im, ax=ax)
-    cbar.set_label('Amplitude (dBm)')
-
-    axbox = plt.axes([0.65, 0.88, 0.2, 0.06])
-    text_box = TextBox(axbox, 'File name:', initial="")
-    ax_save = plt.axes([0.87, 0.88, 0.1, 0.06])
-    btn_save = Button(ax_save, 'Save')
-
+    # Get instrument identification
     instrument_id = sa.inst.query('*IDN?').strip()
 
-    def save_handler(_):
-        """
-        Handle save button click - saves current waterfall plot and data.
-        Args:
-            _: Unused event parameter required by button callback.
-        """
-        user_name = text_box.text.strip()
-        if not user_name:
-            print("No name entered. Not saving.")
-            return
-        iso_date = (datetime.datetime.now()
-                    .isoformat(timespec='seconds')
-                    .replace(':', '-'))
-        base = f"{iso_date}_{user_name}"
-        png_name = base + ".png"
-        npy_name = base + ".npz"
-        fig.savefig(png_name)
-        meta = {
-            'instrument': instrument_id or '',
-            'freq_start': fstart or '',
-            'freq_stop': fstop or '',
-            'rbw': rbw or '',
-            'preamp': preamp,
-            'attenuation': att,
-            'measurement_type': 'waterfall',
-            'n_avg': 1,
-            'n_traces': n_traces,
-            'timestamp': iso_date
-        }
-        np.savez(npy_name, freq=freq, waterfall=waterfall, metadata=meta)
-        print(f"Saved plot as {png_name} and data as {npy_name}")
-
-    btn_save.on_clicked(save_handler)
-
     def update(_):
-        """
-        Update function for animation - acquires new trace and updates waterfall display.
-        Args:
-            _: Frame parameter unused but required by FuncAnimation.
-        Returns:
-            list: List containing updated image artist for blitting.
+        """Animation update function for waterfall display.
+
+        Called by matplotlib FuncAnimation to update the waterfall plot with new data.
+        Acquires new trace, shifts existing data, and updates the plot visualization.
+
+        Parameters
+        ----------
+        _ : int
+            Frame number (unused but required by FuncAnimation interface)
+
+        Returns
+        -------
+        list
+            Empty list (required by FuncAnimation for blitting support)
+
+        Notes
+        -----
+        This function modifies the nonlocal waterfall array by rolling data and
+        adding new measurements. The plot is updated through the plot_waterfall method.
         """
         nonlocal waterfall
+
+        # Acquire new trace
         _, data = sa.acquire_trace()
+
+        # Roll waterfall array and add new data
         waterfall = np.roll(waterfall, -1, axis=0)
         waterfall[-1, :] = data
-        im.set_data(waterfall)
-        return [im]
+
+        # Update plot
+        sa.plot_waterfall(
+            freq, waterfall,
+            preamp=settings["preamp"],
+            att=settings["att"],
+            instrument_id=instrument_id,
+            fstart=settings["fstart"],
+            fstop=settings["fstop"],
+            rbw=settings["rbw"],
+            n_traces=n_traces
+        )
+        return []
 
     # Start animation
-    _ = animation.FuncAnimation(fig, update, interval=200, blit=True)
+    _ = animation.FuncAnimation(plt.gcf(), update, interval=200, blit=False)
     plt.show()
+
+    # Clean up connection
     sa.close()
+
 
 if __name__ == "__main__":
     main()

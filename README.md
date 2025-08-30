@@ -1,12 +1,13 @@
 # Lab Tools
 
-Scripts and Software to control and record measurements from Lab instruments and conduct common experiments.
+Scripts and Software to control and record measurements from Lab instruments.
 
 ## Current Scripts
 
 - **`sa.py`** - Single trace acquisition.
 - **`sa_avg.py`** - Multiple trace averaging.
 - **`sa_waterfall.py`** - Live waterfall display (frequency vs time).
+- **`sa_yfactor.py`** - Y-factor noise temperature measurement.
 - **`sa_read.py`** - Load and display saved measurement files/
 
 ## Hardware Connection Setup
@@ -23,7 +24,7 @@ Scripts and Software to control and record measurements from Lab instruments and
    - Manually set your computer's network interface to match the SA's subnet
    - Use the same subnet mask as shown on the SA
    - Choose an IP address in the same range but different from the SA
-  
+
    **Example:**
    - If SA shows IP: `192.168.1.100` and subnet: `255.255.255.0`
    - Set your computer to: `192.168.1.50` with subnet `255.255.255.0`
@@ -46,9 +47,37 @@ Run any script and follow the interactive prompts:
 python sa.py
 ```
 
-All scripts will:
+## Y-Factor Noise Temperature Measurements
 
-- Prompt for VISA resource selection
-- Allow frequency range and measurement parameter configuration
-- Provide save functionality with metadata
-- Display real-time plots with measurement details
+The `sa_yfactor.py` script implements the standard Y-factor method for measuring system noise temperature.
+
+### Theory
+
+The Y-factor method uses two calibrated noise sources at different temperatures:
+
+```text
+Y = P_hot / P_cold  (linear power ratio)
+T_sys = (T_hot - Y × T_cold) / (Y - 1)
+```
+
+Where:
+
+- **T_hot**: Hot source temperature (~295K room temperature)
+- **T_cold**: Cold source temperature (~77K liquid nitrogen or ambient)
+- **P_hot, P_cold**: Power measurements from spectrum analyzer (converted from dB)
+- **T_sys**: Calculated system noise temperature
+
+### Y-Factor Usage
+
+```bash
+python sa_yfactor.py
+```
+
+The script will guide through:
+
+1. Spectrum analyzer setup (frequency range, RBW, etc.)
+2. Noise source temperature configuration
+3. Hot source measurement (manual connection prompt)
+4. Cold source measurement (manual connection prompt)
+5. Automatic Y-factor and T_sys calculation
+6. Results visualization and data saving
