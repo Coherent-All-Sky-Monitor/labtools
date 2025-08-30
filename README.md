@@ -45,10 +45,3 @@ Run any script and follow the interactive prompts:
 ```bash
 python sa.py
 ```
-
-All scripts will:
-
-- Prompt for VISA resource selection
-- Allow frequency range and measurement parameter configuration
-- Provide save functionality with metadata
-- Display real-time plots with measurement details
